@@ -348,9 +348,15 @@ class ControlPage(ctk.CTkFrame):
             self._bg_label.place(relx=0, rely=0, relwidth=1, relheight=1)
         except Exception: pass
 
-        self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent")
+        self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent", label_fg_color="transparent")
         self.dynamic_zone_scroller.pack(fill="both", expand=True, padx=20, pady=(5, 10))
-        self.dynamic_zone_scroller.lift() # Force the zones to the front of the background stack
+        self.dynamic_zone_scroller.lift() 
+        
+        # Strip all opaque default colors from internal canvases to reveal the background 
+        try:
+            self.dynamic_zone_scroller._parent_canvas.configure(bg="", highlightthickness=0)
+            self.dynamic_zone_scroller._scrollbar.configure(fg_color="transparent")
+        except: pass
 
         self.pwm_entries = []
         self.led_widgets = []
