@@ -341,18 +341,16 @@ class ControlPage(ctk.CTkFrame):
         self.zones_container = ctk.CTkFrame(self.workspace, corner_radius=15, border_width=4, border_color="#94A3B8", fg_color="transparent", bg_color="transparent")
         self.zones_container.pack(side="left", fill="both", expand=True, padx=(0,10), pady=10)
         
-        ctk.CTkLabel(self.zones_container, text="TTS INDICATOR CHANNELS", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(5, 0))
-        
-        self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent")
-        
         # Layer robotic texture behind the scrollable matrix 
         try:
             self.bg_image = ctk.CTkImage(light_image=Image.open(CONTROL_BG_PATH), dark_image=Image.open(CONTROL_BG_PATH), size=(1200, 750))
             self._bg_label = ctk.CTkLabel(self.zones_container, text="", image=self.bg_image)
-            self._bg_label.place(relx=0.5, rely=0.58, anchor="center") 
+            self._bg_label.place(relx=0, rely=0, relwidth=1, relheight=1)
         except Exception: pass
 
+        self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent")
         self.dynamic_zone_scroller.pack(fill="both", expand=True, padx=20, pady=(5, 10))
+        self.dynamic_zone_scroller.lift() # Force the zones to the front of the background stack
 
         self.pwm_entries = []
         self.led_widgets = []
