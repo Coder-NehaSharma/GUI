@@ -8,7 +8,7 @@ import os
 import json
 import subprocess
 from datetime import datetime
-from PIL import Image, ImageTk
+from PIL import Image
 
 import sys
 
@@ -158,7 +158,7 @@ class AdminPage(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
         
-        ctk.CTkLabel(self, text="ADMIN SETTINGS", font=ctk.CTkFont(size=32, weight="bold")).pack(pady=30)
+        ctk.CTkLabel(self, text="⚙ ADMIN SETTINGS", font=ctk.CTkFont(size=32, weight="bold")).pack(pady=30)
         
         form_frame = ctk.CTkFrame(self, fg_color="transparent", corner_radius=20, border_width=4, border_color="#94A3B8")
         form_frame.pack(padx=50, pady=10, ipady=30)
@@ -255,10 +255,10 @@ class ControlPage(ctk.CTkFrame):
         self.workspace = ctk.CTkFrame(self, fg_color="transparent")
         
         # Header Construction
-        ctk.CTkLabel(self.header_frame, text="TTS_GUI_ATPTS", 
+        ctk.CTkLabel(self.header_frame, text="⚙ MULTI-ZONE TEMPERATURE CONTROL AUTOMATION UNIT", 
                  font=ctk.CTkFont(size=20, weight="bold")).pack(side="left", padx=25, pady=15)
         
-        self.btn_admin = ctk.CTkButton(self.header_frame, text="ADMIN SETTINGS", command=lambda: self.controller.show_frame("AdminPage"), font=ctk.CTkFont(size=14, weight="bold"), width=120, height=40, corner_radius=10)
+        self.btn_admin = ctk.CTkButton(self.header_frame, text="⚙ ADMIN SETTINGS", command=lambda: self.controller.show_frame("AdminPage"), font=ctk.CTkFont(size=14, weight="bold"), width=120, height=40, corner_radius=10)
                  
         self.time_label = ctk.CTkLabel(self.header_frame, text="", font=ctk.CTkFont(size=18, weight="bold"))
         self.time_label.pack(side="right", padx=25, pady=15)
@@ -341,31 +341,10 @@ class ControlPage(ctk.CTkFrame):
         self.zones_container = ctk.CTkFrame(self.workspace, corner_radius=15, border_width=4, border_color="#94A3B8", fg_color="transparent", bg_color="transparent")
         self.zones_container.pack(side="left", fill="both", expand=True, padx=(0,10), pady=10)
         
-        # Layer robotic texture behind the scrollable matrix 
-        try:
-            self.pilot_bg = Image.open(CONTROL_BG_PATH).resize((1200, 750))
-            self.tk_bg = ImageTk.PhotoImage(self.pilot_bg)
-            
-            # Use Canvas Viewport to achieve PURE TRANSPARENCY without grey blocks 
-            self.scroll_canvas = tk.Canvas(self.zones_container, bg="#0F172A", highlightthickness=0)
-            self._bg_id = self.scroll_canvas.create_image(0, 0, image=self.tk_bg, anchor="nw")
-            
-            self.v_scrollbar = ctk.CTkScrollbar(self.zones_container, orientation="vertical", command=self.scroll_canvas.yview)
-            self.scroll_canvas.configure(yscrollcommand=self.v_scrollbar.set)
-            
-            self.dynamic_zone_scroller = ctk.CTkFrame(self.scroll_canvas, fg_color="transparent")
-            self.canvas_window = self.scroll_canvas.create_window((0, 0), window=self.dynamic_zone_scroller, anchor="nw")
-            
-            self.v_scrollbar.pack(side="right", fill="y", padx=2)
-            self.scroll_canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-            
-            # Keep the background static even while scrolling 
-            self.scroll_canvas.bind("<Configure>", lambda e: self.scroll_canvas.itemconfig(self._bg_id, width=e.width, height=e.height))
-            self.dynamic_zone_scroller.bind("<Configure>", lambda e: self.scroll_canvas.configure(scrollregion=self.scroll_canvas.bbox("all")))
-        except Exception as e: 
-            print(f"BG Error: {e}")
-            self.dynamic_zone_scroller = ctk.CTkFrame(self.zones_container, fg_color="transparent")
-            self.dynamic_zone_scroller.pack(fill="both", expand=True)
+        ctk.CTkLabel(self.zones_container, text="TTS INDICATOR CHANNELS", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(5, 0))
+        
+        self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent")
+        self.dynamic_zone_scroller.pack(fill="both", expand=True, padx=20, pady=(5, 10))
 
         self.pwm_entries = []
         self.led_widgets = []
@@ -546,10 +525,6 @@ class ControlPage(ctk.CTkFrame):
         self.load_buffer()
         for i in range(num_zones):
             self.update_led(i)
-            
-        # Refit the scrollable window width to match the canvas
-        self.scroll_canvas.update_idletasks()
-        self.scroll_canvas.itemconfig(self.canvas_window, width=self.scroll_canvas.winfo_width())
 
     def perform_logout(self):
         self.controller.current_role = None
@@ -619,19 +594,18 @@ class ControlPage(ctk.CTkFrame):
     def send_data(self):
         if not self.ser: return
         try:
-            # FIXED 258-ITEM PACKET LOGIC (256 PWMs + SW1 + SW2)
-            n_active = len(self.pwm_entries)
+            # FIXED 256-ZONE SENDING LOGIC (256 PWMs + SW1 + SW2 = 258 Values)
+            # 1. Initialize a fixed 256-element array of zeros (4-digit padding)
+            full_pwm_array = ["0000"] * 256
             
-            # 1. Generate PWM payload for the active n zones
-            active_pwm = [str(int((max(0, min(100, float(e.get()))) / 100) * 4095)).zfill(4) for e in self.pwm_entries]
-            
-            # 2. Pad the remaining slots up to 256 with "0000"
-            padding_pwm = ["0000"] * (256 - n_active)
-            
-            # 3. Append Relay Switches at fixed positions 256 and 257
-            all_values = active_pwm + padding_pwm + [self.dig1.get(), self.dig2.get()]
-            
-            final_string = ",".join(all_values) + "\n"
+            # 2. Overlay actual active entries from the GUI
+            for i, ent in enumerate(self.pwm_entries):
+                if i < 256:
+                    val = str(int((max(0, min(100, float(ent.get()))) / 100) * 4095)).zfill(4)
+                    full_pwm_array[i] = val
+                    
+            # 3. Construct the final string (PWMs + 2 Switches)
+            final_string = ",".join(full_pwm_array + [self.dig1.get(), self.dig2.get()]) + "\n"
             self.ser.write(final_string.encode())
             self.save_buffer()
         except: pass
@@ -643,29 +617,31 @@ class ControlPage(ctk.CTkFrame):
                     line = self.ser.readline().decode('utf-8', errors='ignore').strip()
                     if line and ',' in line:
                         parts = line.split(',')
-                        n_active = len(self.pwm_entries)
+                        n = len(self.pwm_entries)
                         
-                        # FIXED 260-ITEM RECEIVING LOGIC (256 Temps + V + I + 2 Dummies)
+                        # FIXED 260-ZONE RECEIVING LOGIC (256 Temps + V + I + 2 Dummies)
                         if len(parts) >= 258:
-                            # 1. Update Temperature Labels for the current active UI zones (indices 0 to n-1)
-                            for i in range(n_active):
+                            # 1. Update ONLY the active zones visible in the UI matrix
+                            for i in range(n):
                                 if i < len(parts):
                                     raw_t = parts[i]
                                     c_temp = self.convert2Tempature(raw_t)
                                     if i < len(self.temp_labels):
                                         self.temp_labels[i].configure(text=f"Temp: {c_temp}°C")
 
-                            # 2. Update Systemic Telemetry (Fixed indices 256 and 257)
-                            v_raw = float(parts[256])
-                            i_raw = float(parts[257])
-                            
-                            v = round(v_raw / 7.0, 2)
-                            i = round(i_raw / 1.0, 2)
-                            p = round(v * i, 2)  # CALCULATED WATTAGE: Power = V * I
+                            # 2. Extract Systemic Telemetry from FIXED offsets (Index 256 and 257)
+                            # This ensures hardware data indexing doesn't shift when GUI zones change.
+                            if len(parts) >= 258:
+                                v_raw = float(parts[256])
+                                i_raw = float(parts[257])
+                                
+                                v = round(v_raw / 7.0, 2)
+                                i = round(i_raw / 1.0, 2)
+                                p = round(v * i, 2)  # CALCULATED WATTAGE: Power = V * I
 
-                            self.voltage_lbl.configure(text=f"VOLTAGE = {v} V")
-                            self.current_lbl.configure(text=f"CURRENT = {i} A")
-                            self.power_lbl.configure(text=f"POWER = {p} W")
+                                self.voltage_lbl.configure(text=f"VOLTAGE = {v} V")
+                                self.current_lbl.configure(text=f"CURRENT = {i} A")
+                                self.power_lbl.configure(text=f"POWER = {p} W")
                 except: pass
 
 if __name__ == "__main__":
