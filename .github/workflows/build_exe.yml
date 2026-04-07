@@ -1,0 +1,40 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build Executable with PyInstaller
+        run: |
+          pyinstaller --onefile --windowed --noconsole `
+          --add-data "background.jpg;." `
+          --add-data "control_bg.jpg;." `
+          --name "IndustrialControlConsole" `
+          testNew2.py
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-Executable
+          path: dist/IndustrialControlConsole.exe
