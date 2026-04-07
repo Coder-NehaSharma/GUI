@@ -594,10 +594,19 @@ class ControlPage(ctk.CTkFrame):
     def send_data(self):
         if not self.ser: return
         try:
-            # DYNAMIC n+2 SENDING LOGIC (n PWMs + SW1 + SW2)
-            # Using 4-digit zero padding (0-4095) for consistency with 12-bit sensor protocol
-            pwm_payload = [str(int((max(0, min(100, float(e.get()))) / 100) * 4095)).zfill(4) for e in self.pwm_entries]
-            final_string = ",".join(pwm_payload + [self.dig1.get(), self.dig2.get()]) + "\n"
+            # FIXED 258-ITEM PACKET LOGIC (256 PWMs + SW1 + SW2)
+            n_active = len(self.pwm_entries)
+            
+            # 1. Generate PWM payload for the active n zones
+            active_pwm = [str(int((max(0, min(100, float(e.get()))) / 100) * 4095)).zfill(4) for e in self.pwm_entries]
+            
+            # 2. Pad the remaining slots up to 256 with "0000"
+            padding_pwm = ["0000"] * (256 - n_active)
+            
+            # 3. Append Relay Switches at fixed positions 256 and 257
+            all_values = active_pwm + padding_pwm + [self.dig1.get(), self.dig2.get()]
+            
+            final_string = ",".join(all_values) + "\n"
             self.ser.write(final_string.encode())
             self.save_buffer()
         except: pass
@@ -609,20 +618,21 @@ class ControlPage(ctk.CTkFrame):
                     line = self.ser.readline().decode('utf-8', errors='ignore').strip()
                     if line and ',' in line:
                         parts = line.split(',')
-                        n = len(self.pwm_entries)
+                        n_active = len(self.pwm_entries)
                         
-                        # DYNAMIC n+4 RECEIVING LOGIC (n Temps + V + I + 2 Dummies)
-                        if len(parts) >= n + 2:
-                            # 1. Update Temperature Labels for each zone
-                            for i in range(n):
-                                raw_t = parts[i]
-                                c_temp = self.convert2Tempature(raw_t)
-                                if i < len(self.temp_labels):
-                                    self.temp_labels[i].configure(text=f"Temp: {c_temp}°C")
+                        # FIXED 260-ITEM RECEIVING LOGIC (256 Temps + V + I + 2 Dummies)
+                        if len(parts) >= 258:
+                            # 1. Update Temperature Labels for the current active UI zones (indices 0 to n-1)
+                            for i in range(n_active):
+                                if i < len(parts):
+                                    raw_t = parts[i]
+                                    c_temp = self.convert2Tempature(raw_t)
+                                    if i < len(self.temp_labels):
+                                        self.temp_labels[i].configure(text=f"Temp: {c_temp}°C")
 
-                            # 2. Update Systemic Telemetry (indices n and n+1)
-                            v_raw = float(parts[n])
-                            i_raw = float(parts[n+1])
+                            # 2. Update Systemic Telemetry (Fixed indices 256 and 257)
+                            v_raw = float(parts[256])
+                            i_raw = float(parts[257])
                             
                             v = round(v_raw / 7.0, 2)
                             i = round(i_raw / 1.0, 2)
