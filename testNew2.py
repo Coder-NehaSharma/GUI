@@ -8,7 +8,7 @@ import os
 import json
 import subprocess
 from datetime import datetime
-from PIL import Image
+from PIL import Image, ImageTk
 
 import sys
 
@@ -343,20 +343,29 @@ class ControlPage(ctk.CTkFrame):
         
         # Layer robotic texture behind the scrollable matrix 
         try:
-            self.bg_image = ctk.CTkImage(light_image=Image.open(CONTROL_BG_PATH), dark_image=Image.open(CONTROL_BG_PATH), size=(1200, 750))
-            self._bg_label = ctk.CTkLabel(self.zones_container, text="", image=self.bg_image)
-            self._bg_label.place(relx=0, rely=0, relwidth=1, relheight=1)
-        except Exception: pass
-
-        self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent", label_fg_color="transparent")
-        self.dynamic_zone_scroller.pack(fill="both", expand=True, padx=20, pady=(5, 10))
-        self.dynamic_zone_scroller.lift() 
-        
-        # Strip all opaque default colors from internal canvases to reveal the background 
-        try:
-            self.dynamic_zone_scroller._parent_canvas.configure(bg="", highlightthickness=0)
-            self.dynamic_zone_scroller._scrollbar.configure(fg_color="transparent")
-        except: pass
+            self.pilot_bg = Image.open(CONTROL_BG_PATH).resize((1200, 750))
+            self.tk_bg = ImageTk.PhotoImage(self.pilot_bg)
+            
+            # Use Canvas Viewport to achieve PURE TRANSPARENCY without grey blocks 
+            self.scroll_canvas = tk.Canvas(self.zones_container, bg="#0F172A", highlightthickness=0)
+            self._bg_id = self.scroll_canvas.create_image(0, 0, image=self.tk_bg, anchor="nw")
+            
+            self.v_scrollbar = ctk.CTkScrollbar(self.zones_container, orientation="vertical", command=self.scroll_canvas.yview)
+            self.scroll_canvas.configure(yscrollcommand=self.v_scrollbar.set)
+            
+            self.dynamic_zone_scroller = ctk.CTkFrame(self.scroll_canvas, fg_color="transparent")
+            self.canvas_window = self.scroll_canvas.create_window((0, 0), window=self.dynamic_zone_scroller, anchor="nw")
+            
+            self.v_scrollbar.pack(side="right", fill="y", padx=2)
+            self.scroll_canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+            
+            # Keep the background static even while scrolling 
+            self.scroll_canvas.bind("<Configure>", lambda e: self.scroll_canvas.itemconfig(self._bg_id, width=e.width, height=e.height))
+            self.dynamic_zone_scroller.bind("<Configure>", lambda e: self.scroll_canvas.configure(scrollregion=self.scroll_canvas.bbox("all")))
+        except Exception as e: 
+            print(f"BG Error: {e}")
+            self.dynamic_zone_scroller = ctk.CTkFrame(self.zones_container, fg_color="transparent")
+            self.dynamic_zone_scroller.pack(fill="both", expand=True)
 
         self.pwm_entries = []
         self.led_widgets = []
@@ -537,6 +546,10 @@ class ControlPage(ctk.CTkFrame):
         self.load_buffer()
         for i in range(num_zones):
             self.update_led(i)
+            
+        # Refit the scrollable window width to match the canvas
+        self.scroll_canvas.update_idletasks()
+        self.scroll_canvas.itemconfig(self.canvas_window, width=self.scroll_canvas.winfo_width())
 
     def perform_logout(self):
         self.controller.current_role = None
