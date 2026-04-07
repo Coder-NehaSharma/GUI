@@ -158,7 +158,7 @@ class AdminPage(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.controller = controller
         
-        ctk.CTkLabel(self, text="⚙ ADMIN SETTINGS", font=ctk.CTkFont(size=32, weight="bold")).pack(pady=30)
+        ctk.CTkLabel(self, text="ADMIN SETTINGS", font=ctk.CTkFont(size=32, weight="bold")).pack(pady=30)
         
         form_frame = ctk.CTkFrame(self, fg_color="transparent", corner_radius=20, border_width=4, border_color="#94A3B8")
         form_frame.pack(padx=50, pady=10, ipady=30)
@@ -255,10 +255,10 @@ class ControlPage(ctk.CTkFrame):
         self.workspace = ctk.CTkFrame(self, fg_color="transparent")
         
         # Header Construction
-        ctk.CTkLabel(self.header_frame, text="⚙ MULTI-ZONE TEMPERATURE CONTROL AUTOMATION UNIT", 
+        ctk.CTkLabel(self.header_frame, text="TTS_GUI_ATPTS", 
                  font=ctk.CTkFont(size=20, weight="bold")).pack(side="left", padx=25, pady=15)
         
-        self.btn_admin = ctk.CTkButton(self.header_frame, text="⚙ ADMIN SETTINGS", command=lambda: self.controller.show_frame("AdminPage"), font=ctk.CTkFont(size=14, weight="bold"), width=120, height=40, corner_radius=10)
+        self.btn_admin = ctk.CTkButton(self.header_frame, text="ADMIN SETTINGS", command=lambda: self.controller.show_frame("AdminPage"), font=ctk.CTkFont(size=14, weight="bold"), width=120, height=40, corner_radius=10)
                  
         self.time_label = ctk.CTkLabel(self.header_frame, text="", font=ctk.CTkFont(size=18, weight="bold"))
         self.time_label.pack(side="right", padx=25, pady=15)
