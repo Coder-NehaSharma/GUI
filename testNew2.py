@@ -346,6 +346,14 @@ class ControlPage(ctk.CTkFrame):
         self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent")
         self.dynamic_zone_scroller.pack(fill="both", expand=True, padx=20, pady=(5, 10))
 
+        # Re-apply the high-fidelity background image behind the zone scroller
+        try:
+            self.zones_bg_image = ctk.CTkImage(light_image=Image.open(CONTROL_BG_PATH), dark_image=Image.open(CONTROL_BG_PATH), size=(1200, 800))
+            self.zones_bg_label = ctk.CTkLabel(self.zones_container, text="", image=self.zones_bg_image)
+            self.zones_bg_label.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self.zones_bg_label.lower()  # Pin to the bottom of the stack
+        except Exception: pass
+
         self.pwm_entries = []
         self.led_widgets = []
 
@@ -485,6 +493,9 @@ class ControlPage(ctk.CTkFrame):
     def rebuild_zones(self):
         # Memory safe destroy (PROTECT C-BOUND IMAGES FROM AUTORELEASE CRASH)
         for widget in self.dynamic_zone_scroller.winfo_children():
+            # Don't destroy the background label if it's somehow a child!
+            if hasattr(self, "zones_bg_label") and widget == self.zones_bg_label:
+                continue
             widget.destroy()
             
         self.pwm_entries = []
