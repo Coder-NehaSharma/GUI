@@ -346,23 +346,9 @@ class ControlPage(ctk.CTkFrame):
         self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent")
         self.dynamic_zone_scroller.pack(fill="both", expand=True, padx=20, pady=(5, 10))
         
-        # INTERNAL TRANSPARENCY HOOK: Force the underlying tkinter canvas to be transparent
-        # CustomTkinter components often have an opaque internal canvas that obscures images.
-        try:
-            self.dynamic_zone_scroller._canvas.configure(bg="#F2F2F2") # Match the root color if needed, or:
-            self.dynamic_zone_scroller.configure(fg_color="transparent")
-        except: pass
-
-        # Re-apply the high-fidelity background image behind the zone scroller
-        try:
-            self.zones_bg_image = ctk.CTkImage(light_image=Image.open(CONTROL_BG_PATH), dark_image=Image.open(CONTROL_BG_PATH), size=(1400, 900))
-            self.zones_bg_label = ctk.CTkLabel(self.zones_container, text="", image=self.zones_bg_image, fg_color="transparent")
-            self.zones_bg_label.place(x=0, y=0, relwidth=1, relheight=1)
-            self.zones_bg_label.lower()  # Pin to the bottom of the stack
-        except Exception: pass
-
         self.pwm_entries = []
         self.led_widgets = []
+        self.temp_labels = []
 
     def open_manual(self):
         if os.path.exists(MANUAL_PATH):
@@ -498,11 +484,8 @@ class ControlPage(ctk.CTkFrame):
         self.rebuild_zones()
 
     def rebuild_zones(self):
-        # Memory safe destroy (PROTECT C-BOUND IMAGES FROM AUTORELEASE CRASH)
+        # Memory safe destroy
         for widget in self.dynamic_zone_scroller.winfo_children():
-            # Don't destroy the background label if it's somehow a child!
-            if hasattr(self, "zones_bg_label") and widget == self.zones_bg_label:
-                continue
             widget.destroy()
             
         self.pwm_entries = []
@@ -510,11 +493,21 @@ class ControlPage(ctk.CTkFrame):
         self.temp_labels = []
         
         num_zones = self.controller.settings.get("num_zones", 32)
+        rows_count = ((num_zones - 1) // 8) + 1
         
-        # Calculate dynamic vertical spacing to organically distribute layouts across empty space matrices
+        # Calculate dynamic vertical spacing
         if num_zones <= 32: y_pad = 25
         elif num_zones <= 64: y_pad = 15
         else: y_pad = 10
+        
+        # DEEP CANVAS STRATEGY: Rescale background to fit total scrollable area
+        # Approx 120 pixels per row of 8 channels
+        total_content_height = max(700, rows_count * 150) 
+        try:
+            self.scroll_bg_img = ctk.CTkImage(light_image=Image.open(CONTROL_BG_PATH), dark_image=Image.open(CONTROL_BG_PATH), size=(1200, total_content_height))
+            bg_lbl = ctk.CTkLabel(self.dynamic_zone_scroller, text="", image=self.scroll_bg_img)
+            bg_lbl.place(x=0, y=0, relwidth=1, height=total_content_height)
+        except: pass
         
         for i in range(num_zones):
             r, c = divmod(i, 8)
