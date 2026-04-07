@@ -345,12 +345,19 @@ class ControlPage(ctk.CTkFrame):
         
         self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent")
         self.dynamic_zone_scroller.pack(fill="both", expand=True, padx=20, pady=(5, 10))
+        
+        # INTERNAL TRANSPARENCY HOOK: Force the underlying tkinter canvas to be transparent
+        # CustomTkinter components often have an opaque internal canvas that obscures images.
+        try:
+            self.dynamic_zone_scroller._canvas.configure(bg="#F2F2F2") # Match the root color if needed, or:
+            self.dynamic_zone_scroller.configure(fg_color="transparent")
+        except: pass
 
         # Re-apply the high-fidelity background image behind the zone scroller
         try:
-            self.zones_bg_image = ctk.CTkImage(light_image=Image.open(CONTROL_BG_PATH), dark_image=Image.open(CONTROL_BG_PATH), size=(1200, 800))
-            self.zones_bg_label = ctk.CTkLabel(self.zones_container, text="", image=self.zones_bg_image)
-            self.zones_bg_label.place(relx=0, rely=0, relwidth=1, relheight=1)
+            self.zones_bg_image = ctk.CTkImage(light_image=Image.open(CONTROL_BG_PATH), dark_image=Image.open(CONTROL_BG_PATH), size=(1400, 900))
+            self.zones_bg_label = ctk.CTkLabel(self.zones_container, text="", image=self.zones_bg_image, fg_color="transparent")
+            self.zones_bg_label.place(x=0, y=0, relwidth=1, relheight=1)
             self.zones_bg_label.lower()  # Pin to the bottom of the stack
         except Exception: pass
 
