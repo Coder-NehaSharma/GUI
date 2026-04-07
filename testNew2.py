@@ -164,7 +164,7 @@ class AdminPage(ctk.CTkFrame):
         form_frame.pack(padx=50, pady=10, ipady=30)
         
         ctk.CTkLabel(form_frame, text="Active Panels (Zones):", font=ctk.CTkFont(size=18, weight="bold")).grid(row=0, column=0, sticky="w", pady=15, padx=(25, 0))
-        self.combo_zones = ctk.CTkComboBox(form_frame, values=["8", "16", "32", "64"], width=120, state="readonly", font=ctk.CTkFont(size=16))
+        self.combo_zones = ctk.CTkComboBox(form_frame, values=["32", "64", "128", "256"], width=120, state="readonly", font=ctk.CTkFont(size=16))
         self.combo_zones.grid(row=0, column=1, padx=(15, 25), pady=15)
         
         ctk.CTkLabel(form_frame, text="User Permissions:", font=ctk.CTkFont(size=20, weight="bold")).grid(row=1, column=0, columnspan=2, sticky="w", pady=(20,15), padx=(25, 0))
@@ -343,14 +343,8 @@ class ControlPage(ctk.CTkFrame):
         
         ctk.CTkLabel(self.zones_container, text="TTS INDICATOR CHANNELS", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(5, 0))
         
-        self.dynamic_zone_scroller = ctk.CTkFrame(self.zones_container, fg_color="transparent", bg_color="transparent")
+        self.dynamic_zone_scroller = ctk.CTkScrollableFrame(self.zones_container, fg_color="transparent", bg_color="transparent")
         self.dynamic_zone_scroller.pack(fill="both", expand=True, padx=20, pady=(5, 10))
-        
-        try:
-            self.bg_image = ctk.CTkImage(light_image=Image.open(CONTROL_BG_PATH), dark_image=Image.open(CONTROL_BG_PATH), size=(1200, 700))
-            self._bg_label = ctk.CTkLabel(self.dynamic_zone_scroller, text="", image=self.bg_image)
-            self._bg_label.place(relx=0.5, rely=0.5, anchor="center")
-        except Exception: pass
 
         self.pwm_entries = []
         self.led_widgets = []
@@ -491,19 +485,17 @@ class ControlPage(ctk.CTkFrame):
     def rebuild_zones(self):
         # Memory safe destroy (PROTECT C-BOUND IMAGES FROM AUTORELEASE CRASH)
         for widget in self.dynamic_zone_scroller.winfo_children():
-            if hasattr(self, "_bg_label") and widget == self._bg_label:
-                continue
             widget.destroy()
             
         self.pwm_entries = []
         self.led_widgets = []
+        self.temp_labels = []
         
-        num_zones = self.controller.settings.get("num_zones", 16)
+        num_zones = self.controller.settings.get("num_zones", 32)
         
         # Calculate dynamic vertical spacing to organically distribute layouts across empty space matrices
-        if num_zones <= 8: y_pad = 75
-        elif num_zones <= 16: y_pad = 45
-        elif num_zones <= 32: y_pad = 25
+        if num_zones <= 32: y_pad = 25
+        elif num_zones <= 64: y_pad = 15
         else: y_pad = 10
         
         for i in range(num_zones):
@@ -522,8 +514,10 @@ class ControlPage(ctk.CTkFrame):
             self.pwm_entries.append(ent)
             
             show_temp = self.controller.settings.get("show_temperature") in [True, 1, "True", "true"]
+            lbl = ctk.CTkLabel(self.dynamic_zone_scroller, text="Temp: 0°C", font=ctk.CTkFont(size=13, weight="bold"))
             if self.controller.current_role == "admin" or show_temp:
-                ctk.CTkLabel(self.dynamic_zone_scroller, text="Temp: 0°C", font=ctk.CTkFont(size=13, weight="bold")).grid(row=r*4+3, column=c, pady=(0, 2))
+                lbl.grid(row=r*4+3, column=c, pady=(0, 2))
+            self.temp_labels.append(lbl)
 
         for i in range(8):
             self.dynamic_zone_scroller.grid_columnconfigure(i, weight=1)
@@ -600,12 +594,9 @@ class ControlPage(ctk.CTkFrame):
     def send_data(self):
         if not self.ser: return
         try:
-            # PAD PWM: Arduino Slave demands exact 3-character lengths to prevent buffer bleeding 
-            pwm_payload = [
-                # str(int(max(0, min(100, float(e.get()))) * 2.55)).zfill(3) 
-                # PAD PWM: Arduino Slave demands exact 4-character lengths to prevent buffer bleeding 
-                str(int((max(0, min(100, float(e.get()))) / 100) * 4095)).zfill(4)
-                for e in self.pwm_entries]
+            # DYNAMIC n+2 SENDING LOGIC (n PWMs + SW1 + SW2)
+            # Using 4-digit zero padding (0-4095) for consistency with 12-bit sensor protocol
+            pwm_payload = [str(int((max(0, min(100, float(e.get()))) / 100) * 4095)).zfill(4) for e in self.pwm_entries]
             final_string = ",".join(pwm_payload + [self.dig1.get(), self.dig2.get()]) + "\n"
             self.ser.write(final_string.encode())
             self.save_buffer()
@@ -618,8 +609,20 @@ class ControlPage(ctk.CTkFrame):
                     line = self.ser.readline().decode('utf-8', errors='ignore').strip()
                     if line and ',' in line:
                         parts = line.split(',')
-                        if len(parts) >= 2:
-                            v_raw, i_raw = float(parts[0]), float(parts[1])
+                        n = len(self.pwm_entries)
+                        
+                        # DYNAMIC n+4 RECEIVING LOGIC (n Temps + V + I + 2 Dummies)
+                        if len(parts) >= n + 2:
+                            # 1. Update Temperature Labels for each zone
+                            for i in range(n):
+                                raw_t = parts[i]
+                                c_temp = self.convert2Tempature(raw_t)
+                                if i < len(self.temp_labels):
+                                    self.temp_labels[i].configure(text=f"Temp: {c_temp}°C")
+
+                            # 2. Update Systemic Telemetry (indices n and n+1)
+                            v_raw = float(parts[n])
+                            i_raw = float(parts[n+1])
                             
                             v = round(v_raw / 7.0, 2)
                             i = round(i_raw / 1.0, 2)
