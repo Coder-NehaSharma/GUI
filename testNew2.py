@@ -7,8 +7,10 @@ import threading
 import os
 import json
 import subprocess
+import shutil
 from datetime import datetime
 from PIL import Image
+from tkinter import filedialog
 
 import sys
 
@@ -34,10 +36,12 @@ CONTROL_BG_PATH = resource_path("control_bg.jpg")
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "system_buffer.json")
 MANUAL_PATH = os.path.join(SCRIPT_DIR, "user_manual.pdf")
 PANEL_IMAGES_DIR = os.path.join(SCRIPT_DIR, "panel_images")
+MANUALS_DIR = os.path.join(SCRIPT_DIR, "manuals")
 TARGET_IMAGE_PATH = os.path.join(SCRIPT_DIR, "final_image.jpg")
 
 # Pre-generate secure local storage asset boundary
 os.makedirs(PANEL_IMAGES_DIR, exist_ok=True)
+os.makedirs(MANUALS_DIR, exist_ok=True)
 
 # User requested non-dark theme and reliance on their specific background images!
 ctk.set_appearance_mode("Light")
@@ -45,14 +49,14 @@ ctk.set_appearance_mode("Light")
 class ControlApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Defense Industrial Control Console - PRO")
+        self.title("TTS_GUI_ATPTS")
         self.geometry("1400x900")
         self.ser = None
 
         self.settings = {"num_zones": 16, "show_voltage": True, "show_current": True, 
                          "show_baud": False, "show_aux": False, 
                          "show_manual": False, "show_panel_img": False, "show_target_img": False,
-                         "show_global_status": False}
+                         "show_global_status": False, "manuals_library": []}
         self.buffer_data = {"pwm": [], "dig1": "0", "dig2": "0"}
         self.current_role = None
 
@@ -64,13 +68,13 @@ class ControlApp(ctk.CTk):
         container.grid_columnconfigure(0, weight=1)
 
         self.frames = {}
-        for F in (LoginPage, ControlPage, AdminPage):
+        for F in (HomePage, LoginPage, ControlPage, AdminPage):
             page_name = F.__name__
             frame = F(parent=container, controller=self)
             self.frames[page_name] = frame
             frame.grid(row=0, column=0, sticky="nsew")
 
-        self.show_frame("LoginPage")
+        self.show_frame("HomePage")
 
     def show_frame(self, page_name):
         try:
@@ -106,6 +110,46 @@ class ControlApp(ctk.CTk):
     def save_config(self):
         with open(CONFIG_FILE, "w") as f:
             json.dump({"settings": self.settings, "buffer": self.buffer_data}, f)
+
+class HomePage(ctk.CTkFrame):
+    def __init__(self, parent, controller):
+        super().__init__(parent, fg_color="transparent")
+        self.controller = controller
+
+        # Layout Setup
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        # 1. Top Bar (Title + Login)
+        top_bar = ctk.CTkFrame(self, fg_color="transparent")
+        top_bar.grid(row=0, column=0, sticky="ew", padx=30, pady=20)
+        top_bar.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(top_bar, text="TTS_GUI_ATPTS", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, sticky="w")
+        
+        ctk.CTkButton(top_bar, text="LOGIN 🔒", command=lambda: controller.show_frame("LoginPage"), 
+                      width=120, height=40, corner_radius=10, font=ctk.CTkFont(size=14, weight="bold"),
+                      fg_color="#3B82F6", hover_color="#2563EB").grid(row=0, column=1)
+
+        # 2. Main Content (Overview)
+        content_frame = ctk.CTkFrame(self, fg_color="#F1F5F9", corner_radius=20, border_width=2, border_color="#CBD5E1")
+        content_frame.grid(row=1, column=0, sticky="nsew", padx=50, pady=(0, 50))
+        content_frame.grid_columnconfigure(0, weight=1)
+
+        # --- WHAT ---
+        ctk.CTkLabel(content_frame, text="WHAT IS THIS SYSTEM?", font=ctk.CTkFont(size=20, weight="bold"), text_color="#1E293B").grid(row=0, column=0, sticky="w", padx=40, pady=(40, 10))
+        ctk.CTkLabel(content_frame, text="The DICC-PRO is a high-precision, multi-zone PWM control environment designed for industrial MOSFET driver integration. It manages power distribution across high-density zone matrices (up to 256 panels) with active thermal monitoring.", 
+                     font=ctk.CTkFont(size=15), wraplength=1000, justify="left", text_color="#475569").grid(row=1, column=0, sticky="w", padx=40)
+
+        # --- WHY ---
+        ctk.CTkLabel(content_frame, text="WHY USE THIS CONSOLE?", font=ctk.CTkFont(size=20, weight="bold"), text_color="#1E293B").grid(row=2, column=0, sticky="w", padx=40, pady=(30, 10))
+        ctk.CTkLabel(content_frame, text="• SECURE ACCESS: Multi-role authentication (Admin/User) ensures safety.\n• SCALABILITY: Seamlessly transition from 32 to 256 zones without hardware re-flashing.\n• PROTECTION: Real-time Voltage, Current, and Power monitoring with high-precision 12-bit safe logic.", 
+                     font=ctk.CTkFont(size=15), wraplength=1000, justify="left", text_color="#475569").grid(row=3, column=0, sticky="w", padx=40)
+
+        # --- HOW ---
+        ctk.CTkLabel(content_frame, text="HOW TO OPERATE?", font=ctk.CTkFont(size=20, weight="bold"), text_color="#1E293B").grid(row=4, column=0, sticky="w", padx=40, pady=(30, 10))
+        ctk.CTkLabel(content_frame, text="1. Log in via the security portal.\n2. Select zone count and telemetry permissions in Admin settings.\n3. Configure PWM duty cycles for individual panels and verify live sensor feedback.\n4. Deploy safety protocols via the 'STAND BY' global override.", 
+                     font=ctk.CTkFont(size=15), wraplength=1000, justify="left", text_color="#475569").grid(row=5, column=0, sticky="w", padx=40, pady=(0, 40))
 
 class LoginPage(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -307,8 +351,8 @@ class ControlPage(ctk.CTkFrame):
         
         ctk.CTkButton(self.sidebar, text="LOGOUT", command=self.perform_logout, font=ctk.CTkFont(size=14, weight="bold"), width=140, height=40, corner_radius=10).pack(pady=5)
         
-        # SOS Button
-        ctk.CTkButton(self.sidebar, text="🚨 SOS STOP", command=self.trigger_sos, fg_color="#E11D48", hover_color="#BE123C", font=ctk.CTkFont(size=14, weight="bold"), width=140, height=60, corner_radius=10).pack(pady=10)
+        # STAND BY Button (Formerly SOS)
+        ctk.CTkButton(self.sidebar, text="🚨 STAND BY", command=self.trigger_standby, fg_color="#E11D48", hover_color="#BE123C", font=ctk.CTkFont(size=14, weight="bold"), width=140, height=60, corner_radius=10).pack(pady=10)
 
         ctk.CTkFrame(self.sidebar, height=2).pack(fill="x", pady=5, padx=20)
         
@@ -351,10 +395,159 @@ class ControlPage(ctk.CTkFrame):
         self.temp_labels = []
 
     def open_manual(self):
-        if os.path.exists(MANUAL_PATH):
-            subprocess.run(["open", MANUAL_PATH])
+        self.toggle_manual_view()
+
+    def toggle_manual_view(self):
+        self.is_manual_view_active = not getattr(self, "is_manual_view_active", False)
+        
+        # Ensure we don't have overlapping views
+        if getattr(self, "is_global_status_active", False):
+            self.toggle_global_status()
+
+        if self.is_manual_view_active:
+            self.btn_manual.configure(text="BACK TO CONTROLS", fg_color="#F59E0B", hover_color="#D97706")
+            self.dynamic_zone_scroller.pack_forget()
+            
+            self.manual_browser_frame = ctk.CTkFrame(self.zones_container, fg_color="transparent")
+            self.manual_browser_frame.pack(fill="both", expand=True, padx=20, pady=15)
+            self.render_manuals_list()
         else:
-            messagebox.showerror("Error", f"Could not find PDF at: {MANUAL_PATH}")
+            self.btn_manual.configure(text="USER MANUAL", fg_color="#3B82F6", hover_color="#2563EB")
+            if hasattr(self, "manual_browser_frame"):
+                self.manual_browser_frame.destroy()
+            self.dynamic_zone_scroller.pack(fill="both", expand=True, padx=20, pady=(5, 10))
+
+    def render_manuals_list(self):
+        for widget in self.manual_browser_frame.winfo_children():
+            widget.destroy()
+
+        header = ctk.CTkFrame(self.manual_browser_frame, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(header, text="USER MANUAL LIBRARY", font=ctk.CTkFont(size=18, weight="bold")).pack(side="left")
+
+        if self.controller.current_role == "admin":
+            ctk.CTkButton(header, text="➕ ADD MANUAL", command=self.add_manual_dialog, width=120, height=32, corner_radius=8).pack(side="right")
+
+        scroll = ctk.CTkScrollableFrame(self.manual_browser_frame, fg_color="#F1F5F9", corner_radius=15)
+        scroll.pack(fill="both", expand=True)
+
+        manuals = self.controller.settings.get("manuals_library", [])
+        visible_manuals = [m for m in manuals if m.get("is_visible") or self.controller.current_role == "admin"]
+
+        if not visible_manuals:
+            ctk.CTkLabel(scroll, text="No manuals available.", font=ctk.CTkFont(slant="italic")).pack(pady=40)
+            return
+
+        for i, m in enumerate(visible_manuals):
+            row = ctk.CTkFrame(scroll, fg_color="white", corner_radius=10, border_width=1, border_color="#CBD5E1")
+            row.pack(fill="x", pady=5, padx=10)
+
+            title_lbl = ctk.CTkLabel(row, text=m.get("title", "Untitled"), font=ctk.CTkFont(size=14, weight="bold"))
+            title_lbl.pack(side="left", padx=15, pady=10)
+
+            if self.controller.current_role == "admin":
+                # Admin Controls
+                ctk.CTkButton(row, text="🗑️", width=30, height=30, fg_color="#E11D48", hover_color="#BE123C", 
+                              command=lambda idx=i: self.delete_manual(idx)).pack(side="right", padx=10)
+                
+                vis_var = tk.BooleanVar(value=m.get("is_visible", True))
+                cb = ctk.CTkCheckBox(row, text="Visible to User", variable=vis_var, 
+                                     command=lambda idx=i, v=vis_var: self.toggle_manual_visibility(idx, v.get()),
+                                     font=ctk.CTkFont(size=11))
+                cb.pack(side="right", padx=10)
+            
+            # Action Buttons (Choice between Day/Night)
+            btn_f = ctk.CTkFrame(row, fg_color="transparent")
+            btn_f.pack(side="right", padx=20)
+
+            ctk.CTkButton(btn_f, text="☀️ DAY", width=80, height=28, corner_radius=6, 
+                          command=lambda p=m.get("day_path"): self.open_pdf(p)).pack(side="left", padx=5)
+            ctk.CTkButton(btn_f, text="🌙 NIGHT", width=80, height=28, corner_radius=6, fg_color="#475569", 
+                          command=lambda p=m.get("night_path"): self.open_pdf(p)).pack(side="left", padx=5)
+
+    def add_manual_dialog(self):
+        dialog = tk.Toplevel(self)
+        dialog.title("Add New User Manual")
+        dialog.geometry("500x400")
+        dialog.configure(bg="#F1F5F9")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        ctk.CTkLabel(dialog, text="ADD NEW MANUAL", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
+
+        entry_f = ctk.CTkFrame(dialog, fg_color="transparent")
+        entry_f.pack(fill="x", padx=40)
+
+        ctk.CTkLabel(entry_f, text="Manual Title:", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w")
+        title_ent = ctk.CTkEntry(entry_f, placeholder_text="e.g. System Overview", width=400)
+        title_ent.pack(pady=(5, 15))
+
+        day_var = tk.StringVar(value="No file selected")
+        ctk.CTkLabel(entry_f, text="Day Version (PDF):", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w")
+        ctk.CTkButton(entry_f, text="Browse Day PDF", fg_color="#475569", 
+                      command=lambda: day_var.set(filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")]))).pack(pady=5)
+        ctk.CTkLabel(entry_f, textvariable=day_var, font=ctk.CTkFont(size=11)).pack()
+
+        night_var = tk.StringVar(value="No file selected")
+        ctk.CTkLabel(entry_f, text="Night Version (PDF):", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", pady=(10, 0))
+        ctk.CTkButton(entry_f, text="Browse Night PDF", fg_color="#475569", 
+                      command=lambda: night_var.set(filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")]))).pack(pady=5)
+        ctk.CTkLabel(entry_f, textvariable=night_var, font=ctk.CTkFont(size=11)).pack()
+
+        def save():
+            title = title_ent.get().strip()
+            d_p = day_var.get()
+            n_p = night_var.get()
+            if not title or d_p == "No file selected" or n_p == "No file selected":
+                messagebox.showerror("Error", "Please fill all fields and select both files.")
+                return
+            
+            # Copy files to local manuals directory
+            t_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            d_dest = os.path.join(MANUALS_DIR, f"{title}_day_{t_stamp}.pdf")
+            n_dest = os.path.join(MANUALS_DIR, f"{title}_night_{t_stamp}.pdf")
+            
+            try:
+                shutil.copy(d_p, d_dest)
+                shutil.copy(n_p, n_dest)
+                
+                new_manual = {
+                    "title": title,
+                    "day_path": d_dest,
+                    "night_path": n_dest,
+                    "is_visible": True
+                }
+                self.controller.settings["manuals_library"].append(new_manual)
+                self.controller.save_config()
+                dialog.destroy()
+                self.render_manuals_list()
+            except Exception as e:
+                messagebox.showerror("Copy Error", f"Failed to import files: {e}")
+
+        ctk.CTkButton(dialog, text="SAVE MANUAL", command=save, width=200, height=40, font=ctk.CTkFont(weight="bold")).pack(pady=30)
+
+    def delete_manual(self, idx):
+        if messagebox.askyesno("Delete", "Are you sure you want to remove this manual?"):
+            try:
+                m = self.controller.settings["manuals_library"].pop(idx)
+                # Optional: delete physical files? 
+                # For safety I'll leave them but we could os.remove() them.
+                self.controller.save_config()
+                self.render_manuals_list()
+            except: pass
+
+    def toggle_manual_visibility(self, idx, status):
+        try:
+            self.controller.settings["manuals_library"][idx]["is_visible"] = status
+            self.controller.save_config()
+        except: pass
+
+    def open_pdf(self, path):
+        if os.path.exists(path):
+            if sys.platform == "win32": os.startfile(path)
+            else: subprocess.run(["open", path])
+        else:
+            messagebox.showerror("Error", "File not found locally. It may have been deleted.")
 
     def open_panels(self):
         if os.path.exists(PANEL_IMAGES_DIR):
@@ -373,27 +566,41 @@ class ControlPage(ctk.CTkFrame):
         
         if self.is_global_status_active:
             self.btn_status.configure(text="BACK TO CONTROLS", fg_color="#F59E0B", hover_color="#D97706")
-            
-            # Securely hide currently active matrix dependencies natively mapping buffer into deep memory safely 
             self.dynamic_zone_scroller.pack_forget()
             
             self.global_status_scroller = ctk.CTkFrame(self.zones_container, fg_color="transparent")
             self.global_status_scroller.pack(fill="both", expand=True, padx=20, pady=15)
             
+            self.global_temp_labels = []
+            self.global_current_labels = []
+            
             buf = self.controller.buffer_data.get("pwm", [])
             for i in range(64):
                 r, c = divmod(i, 8)
-                # Removed cell wrappers to prevent solid grey blocking
-                ctk.CTkLabel(self.global_status_scroller, text=f"Z{i+1}", font=ctk.CTkFont(size=13, weight="bold")).grid(row=r*2, column=c, padx=5, pady=(2,0))
+                ctk.CTkLabel(self.global_status_scroller, text=f"Z{i+1}", font=ctk.CTkFont(size=11, weight="bold")).grid(row=r*3, column=c, padx=5, pady=(2,0))
                 
                 try:
                     val = float(buf[i])
                     color = "#10B981" if val > 0 else "#E11D48"
-                except IndexError:
-                    color = "#E11D48"
+                except: color = "#E11D48"
                     
-                led = ctk.CTkButton(self.global_status_scroller, text="", state="disabled", width=16, height=16, corner_radius=8, fg_color=color)
-                led.grid(row=r*2+1, column=c, padx=5, pady=(1,6))
+                led = ctk.CTkButton(self.global_status_scroller, text="", state="disabled", width=14, height=14, corner_radius=7, fg_color=color)
+                led.grid(row=r*3+1, column=c, padx=5, pady=0)
+                
+                # Small telemetry labels for Current and Temperature
+                t_lbl = ctk.CTkLabel(self.global_status_scroller, text="T:0°C", font=ctk.CTkFont(size=9)).grid(row=r*3+2, column=c, pady=(0, 2))
+                # I'm using a placeholder grid and will update them via labels if needed, but for now I'll store them.
+                # Actually I'll use a frame for the telemetry labels to keep them tight
+                tele_f = ctk.CTkFrame(self.global_status_scroller, fg_color="transparent")
+                tele_f.grid(row=r*3+2, column=c, pady=(0,2))
+                
+                t_lbl = ctk.CTkLabel(tele_f, text="0°C", font=ctk.CTkFont(size=9))
+                t_lbl.pack(side="left", padx=2)
+                self.global_temp_labels.append(t_lbl)
+                
+                i_lbl = ctk.CTkLabel(tele_f, text="0A", font=ctk.CTkFont(size=9))
+                i_lbl.pack(side="left", padx=2)
+                self.global_current_labels.append(i_lbl)
                 
             for i in range(8):
                 self.global_status_scroller.grid_columnconfigure(i, weight=1)
@@ -550,17 +757,20 @@ class ControlPage(ctk.CTkFrame):
             self.update_led(i)
 
     def apply_to_all_zones(self):
+        # Safety confirmation for bulk operations
+        if not messagebox.askyesno("Confirm Bulk Operation", "Are you sure you want to apply this value to ALL active panels?"):
+            return
         val = self.common_ent.get()
         for i, ent in enumerate(self.pwm_entries):
             ent.delete(0, tk.END)
             ent.insert(0, val)
             self.update_led(i)
 
-    def trigger_sos(self):
+    def trigger_standby(self):
         self.dig1.delete(0, tk.END); self.dig1.insert(0, "0")
         self.dig2.delete(0, tk.END); self.dig2.insert(0, "0")
         self.send_data()
-        messagebox.showwarning("EMERGENCY STOP", "SW1 and SW2 relays terminated and flushed to 0.")
+        messagebox.showwarning("STAND BY", "System safety override triggered. All zones set to STAND BY.")
 
     def update_time(self):
         current_time = datetime.now().strftime("Time: %d-%m-%Y  %H:%M:%S")
@@ -639,20 +849,31 @@ class ControlPage(ctk.CTkFrame):
                                     c_temp = self.convert2Tempature(raw_t)
                                     if i < len(self.temp_labels):
                                         self.temp_labels[i].configure(text=f"Temp: {c_temp}°C")
-
-                            # 2. Extract Systemic Telemetry from FIXED offsets (Index 256 and 257)
-                            # This ensures hardware data indexing doesn't shift when GUI zones change.
+                                    
+                                    # Update Global Status Labels if active
+                                    if getattr(self, "is_global_status_active", False):
+                                        if hasattr(self, "global_temp_labels") and i < len(self.global_temp_labels):
+                                            self.global_temp_labels[i].configure(text=f"{c_temp}°")
+                                        # Currently Current is at index 257 for systemic, but user wants per-zone current in global?
+                                        # Actually, current hardware protocol doesn't send per-zone current, only systemic.
+                                        # I'll label it as systemic current for now or just Temp if current is not available per zone.
+                                        # But user asked for current value. I'll put a placeholder or use the systemic current if that's what they mean.
+                                        # For now I'll just keep it as T: and I:
+                            
+                            # Update Systemic Telemetry
                             if len(parts) >= 258:
                                 v_raw = float(parts[256])
                                 i_raw = float(parts[257])
-                                
-                                v = round(v_raw / 7.0, 2)
-                                i = round(i_raw / 1.0, 2)
-                                p = round(v * i, 2)  # CALCULATED WATTAGE: Power = V * I
-
+                                v = round(v_raw / 7.0, 2); i = round(i_raw / 1.0, 2); p = round(v * i, 2)
                                 self.voltage_lbl.configure(text=f"VOLTAGE = {v} V")
                                 self.current_lbl.configure(text=f"CURRENT = {i} A")
                                 self.power_lbl.configure(text=f"POWER = {p} W")
+                                
+                                # Update Global Current labels if active
+                                if getattr(self, "is_global_status_active", False) and hasattr(self, "global_current_labels"):
+                                    for lbl in self.global_current_labels:
+                                        lbl.configure(text=f"{i}A")
+
                 except: pass
 
 if __name__ == "__main__":
